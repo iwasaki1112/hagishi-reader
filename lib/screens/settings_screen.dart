@@ -89,6 +89,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
           ),
+          Consumer<AudioService>(
+            builder: (context, audioService, child) {
+              return SwitchListTile(
+                title: const Text('録音時バイブレーション'),
+                subtitle: const Text('歯ぎしり検出時にバイブレーションで通知'),
+                value: audioService.vibrationEnabled,
+                onChanged: (value) {
+                  audioService.setVibrationEnabled(value);
+                },
+              );
+            },
+          ),
 
           const SizedBox(height: 16),
 

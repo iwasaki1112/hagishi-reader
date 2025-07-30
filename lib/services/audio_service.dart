@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vibration/vibration.dart';
 import '../models/bruxism_event.dart';
 import '../models/sleep_session.dart';
 import 'database_service.dart';
@@ -32,11 +33,15 @@ class AudioService extends ChangeNotifier {
   SleepSession? _currentSession;
   String? _sessionDirectory;
   
+  // バイブレーション設定
+  bool _vibrationEnabled = true;
+  
   bool get isMonitoring => _isMonitoring;
   double get currentDecibel => _currentDecibel;
   bool get isRecording => _isRecording;
   double get detectionThreshold => _detectionThreshold;
   bool get isAboveThreshold => _currentDecibel > _detectionThreshold;
+  bool get vibrationEnabled => _vibrationEnabled;
 
   Future<bool> checkPermission() async {
     final status = await Permission.microphone.status;
@@ -68,8 +73,9 @@ class AudioService extends ChangeNotifier {
     // 新しいスリープセッションを作成
     await _createNewSession();
 
-    // 設定から検出閾値を読み込み
+    // 設定から検出閾値とバイブレーション設定を読み込み
     await _loadDetectionThreshold();
+    await _loadVibrationSetting();
 
     // iOS Audio Sessionを設定
     print('Audio Session設定開始...');
@@ -225,6 +231,8 @@ class AudioService extends ChangeNotifier {
     _isRecording = true;
     notifyListeners();
     
+    // バイブレーションで録音開始を通知
+    await _triggerVibration();
 
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -317,6 +325,37 @@ class AudioService extends ChangeNotifier {
   /// 公開メソッド：設定から検出閾値を再読み込み
   Future<void> reloadDetectionThreshold() async {
     await _loadDetectionThreshold();
+  }
+
+  /// バイブレーション設定を読み込み
+  Future<void> _loadVibrationSetting() async {
+    final prefs = await SharedPreferences.getInstance();
+    _vibrationEnabled = prefs.getBool('vibrationEnabled') ?? true;
+    notifyListeners();
+  }
+
+  /// バイブレーション設定を保存
+  Future<void> setVibrationEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('vibrationEnabled', enabled);
+    _vibrationEnabled = enabled;
+    notifyListeners();
+  }
+
+  /// バイブレーションを実行
+  Future<void> _triggerVibration() async {
+    if (!_vibrationEnabled) return;
+    
+    try {
+      // デバイスがバイブレーションをサポートしているかチェック
+      bool? hasVibrator = await Vibration.hasVibrator();
+      if (hasVibrator == true) {
+        // 短いバイブレーション（200ms）
+        await Vibration.vibrate(duration: 200);
+      }
+    } catch (e) {
+      print('バイブレーションエラー: $e');
+    }
   }
 
   @override
