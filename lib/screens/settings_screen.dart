@@ -182,7 +182,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('プライバシーポリシー'),
         content: const SingleChildScrollView(
           child: Text(
-            '歯ぎしりリーダーは、すべての録音データをお使いのデバイス内にのみ保存します。外部サーバーへの送信は一切行いません。\n\n'
+            '歯ぎしリーダーは、すべての録音データをお使いのデバイス内にのみ保存します。外部サーバーへの送信は一切行いません。\n\n'
             '録音データは暗号化されてデバイス内に保存され、ユーザーの明示的な操作なしに共有されることはありません。',
           ),
         ),
@@ -200,7 +200,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('歯ぎしりリーダー'),
+        title: const Text('歯ぎしリーダー'),
         content: const Column(
           mainAxisSize: MainAxisSize.min,
           children: [

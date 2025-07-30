@@ -1,4 +1,4 @@
-# HagishiReader - Flutter版
+# 歯ぎしリーダー - Flutter版
 
 Flutter で開発した iOS/Android 対応の歯ぎしり検出・録音アプリケーション
 

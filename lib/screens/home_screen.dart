@@ -30,7 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('歯ぎしりリーダー'),
+        title: const Text('歯ぎしリーダー'),
         centerTitle: true,
       ),
       body: Padding(

@@ -29,7 +29,7 @@ class MyApp extends StatelessWidget {
       ],
       child: ToastificationWrapper(
         child: MaterialApp(
-          title: '歯ぎしりリーダー',
+          title: '歯ぎしリーダー',
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
               seedColor: Colors.blue,
