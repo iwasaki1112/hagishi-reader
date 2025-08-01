@@ -6,35 +6,35 @@ Flutter で開発した iOS/Android 対応の歯ぎしり検出・録音アプ�
 
 - 🌙 **自動歯ぎしり検出**: バックグラウンドで音声をモニタリング
 - 🎙️ **自動録音**: 検出時に前後の音声を含めて自動録音  
-- 📊 **統計分析**: 日別・週別・月別の統計情報とグラフ表示
+- 🗂️ **セッション管理**: 睡眠セッションごとに録音を整理
 - 🔒 **プライバシー保護**: すべてのデータはデバイス内に保存
 - 📱 **Material Design 3**: ダークモード対応の現代的なUI
 
 ## 🛠️ 技術スタック
 
 - **Framework**: Flutter 3.x
-- **言語**: Dart
+- **言語**: Dart 3.7+
 - **データベース**: SQLite (sqflite)
 - **音声処理**: record パッケージ
-- **グラフ**: fl_chart
 - **状態管理**: Provider
 
 ## 📁 プロジェクト構造
 
 ```
 lib/
-├── main.dart              # アプリのエントリーポイント
+├── main.dart                  # アプリのエントリーポイント
 ├── models/
-│   └── bruxism_event.dart # 歯ぎしりイベントのデータモデル
+│   ├── bruxism_event.dart     # 歯ぎしりイベントのデータモデル
+│   └── sleep_session.dart     # 睡眠セッションのデータモデル
 ├── services/
 │   ├── audio_service.dart     # 音声処理・検出サービス
 │   └── database_service.dart  # データベース操作
 ├── screens/
-│   ├── home_screen.dart       # ホーム画面
-│   ├── recordings_screen.dart # 録音リスト画面
-│   ├── statistics_screen.dart # 統計画面
+│   ├── home_screen.dart       # ホーム画面（モニタリング）
+│   ├── recordings_screen.dart # 録音リスト・再生画面
 │   └── settings_screen.dart   # 設定画面
-└── widgets/               # 共通ウィジェット
+└── utils/
+    └── time_formatter.dart    # 時刻フォーマットユーティリティ
 ```
 
 ## 🚀 セットアップ
@@ -96,18 +96,21 @@ flutter build apk --release
 1. **権限許可**: 初回起動時にマイクアクセスを許可
 2. **スリープモード開始**: ホーム画面の円をタップ
 3. **自動検出**: 歯ぎしりが検出されると自動録音
-4. **データ確認**: 録音タブで音声ファイルを確認
-5. **統計分析**: 統計タブで傾向を分析
+4. **データ確認**: 録音タブで録音ファイルを確認
+5. **設定調整**: 設定タブで検出感度や通知方法をカスタマイズ
 
 ## 📦 主要パッケージ
 
-- `provider`: 状態管理
-- `record`: 音声録音
-- `sqflite`: ローカルデータベース  
-- `fl_chart`: チャート・グラフ表示
-- `permission_handler`: 権限管理
-- `shared_preferences`: 設定保存
-- `path_provider`: ファイルパス取得
+- `provider ^6.1.5`: 状態管理
+- `record ^6.0.0`: 音声録音
+- `sqflite ^2.4.2`: ローカルデータベース  
+- `audio_session ^0.1.21`: オーディオセッション管理
+- `permission_handler ^12.0.1`: 権限管理
+- `shared_preferences ^2.5.3`: 設定保存
+- `path_provider ^2.1.5`: ファイルパス取得
+- `wakelock_plus ^1.2.10`: 画面ロック防止
+- `flutter_slidable ^4.0.0`: スワイプアクション
+- `intl ^0.20.2`: 国際化・日時フォーマット
 
 ## 🔧 開発・デバッグ
 

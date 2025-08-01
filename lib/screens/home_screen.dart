@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'package:toastification/toastification.dart';
 import '../services/audio_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -29,13 +28,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final audioService = Provider.of<AudioService>(context);
     
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('歯ぎしリーダー'),
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
           children: [
             // Fixed space for indicators (always reserved)
             SizedBox(
@@ -59,19 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       await WakelockPlus.disable();
                       await audioService.stopMonitoring();
                       
-                      if (mounted) {
-                        toastification.show(
-                          context: context,
-                          type: ToastificationType.success,
-                          style: ToastificationStyle.fillColored,
-                          title: const Text('スリープモード終了'),
-                          description: const Text('画面ロックが有効化されました'),
-                          alignment: Alignment.topCenter,
-                          autoCloseDuration: const Duration(seconds: 3),
-                          primaryColor: Colors.green,
-                          icon: const Icon(Icons.nightlight_outlined),
-                        );
-                      }
+                      // スリープモード終了
                     } else {
                       try {
                         // 権限確認を明示的に実行
@@ -81,48 +65,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           await WakelockPlus.enable();
                           await audioService.startMonitoring();
                           
-                          if (mounted) {
-                            toastification.show(
-                              context: context,
-                              type: ToastificationType.info,
-                              style: ToastificationStyle.fillColored,
-                              title: const Text('スリープモード開始'),
-                              description: const Text('画面ロックが無効化されました'),
-                              alignment: Alignment.topCenter,
-                              autoCloseDuration: const Duration(seconds: 3),
-                              primaryColor: Colors.blue,
-                              icon: const Icon(Icons.nightlight_round),
-                            );
-                          }
+                          // スリープモード開始
                         } else {
-                          if (mounted) {
-                            toastification.show(
-                              context: context,
-                              type: ToastificationType.warning,
-                              style: ToastificationStyle.fillColored,
-                              title: const Text('権限が必要です'),
-                              description: const Text('設定画面でマイク権限を許可してください'),
-                              alignment: Alignment.topCenter,
-                              autoCloseDuration: const Duration(seconds: 5),
-                              primaryColor: Colors.orange,
-                              icon: const Icon(Icons.mic_off),
-                            );
-                          }
+                          // 権限が必要
+                          print('マイク権限が必要です');
                         }
                       } catch (e) {
-                        if (mounted) {
-                          toastification.show(
-                            context: context,
-                            type: ToastificationType.error,
-                            style: ToastificationStyle.fillColored,
-                            title: const Text('エラーが発生しました'),
-                            description: Text(e.toString()),
-                            alignment: Alignment.topCenter,
-                            autoCloseDuration: const Duration(seconds: 4),
-                            primaryColor: Colors.red,
-                            icon: const Icon(Icons.error),
-                          );
-                        }
+                        print('エラー: $e');
                       }
                     }
                   },
@@ -170,6 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ],
+          ),
         ),
       ),
     );
@@ -350,7 +300,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(width: 6),
                   Text(
                     audioService.isRecording 
-                        ? '録音中'
+                        ? '録音中 (${audioService.recordingCountdown}秒後に終了)'
                         : (audioService.isAboveThreshold ? '閾値超過　検出中' : '監視中'),
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: audioService.isRecording 

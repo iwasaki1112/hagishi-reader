@@ -1,19 +1,22 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vibration/vibration.dart';
 import '../models/bruxism_event.dart';
 import '../models/sleep_session.dart';
 import 'database_service.dart';
 
-class AudioService extends ChangeNotifier {
+class AudioService extends ChangeNotifier with WidgetsBindingObserver {
   final AudioRecorder _recorder = AudioRecorder();
   final AudioRecorder _eventRecorder = AudioRecorder(); // イベント録音用の別インスタンス
+  
+  // MethodChannel for iOS native audio session configuration
+  static const _audioChannel = MethodChannel('com.example.hagishireader/audio');
   
   bool _isMonitoring = false;
   double _currentDecibel = 0.0;
@@ -21,10 +24,14 @@ class AudioService extends ChangeNotifier {
   bool _isRecording = false;
   String? _currentMonitoringPath; // 現在の監視録音パス
   Timer? _recordingTimer; // 録音タイマー
+  Timer? _notificationTestTimer; // 通知テスト用タイマー
   
   // 検出パラメータ
   double _detectionThreshold = -30.0; // dB（動的に変更可能）
-  static const int _requiredConsecutiveDetections = 3; // 5→3に短縮
+  static const int _requiredConsecutiveDetections = 1; // テスト用に1に設定
+  
+  // テスト用: より低い閾値を設定（検出しやすくする）
+  bool _testMode = false; // テストモード無効
   int _consecutiveDetections = 0;
   DateTime? _lastDetectionTime; // 最後の検出時刻
   static const int _detectionTimeoutSeconds = 2; // 2秒以内に再検出があれば継続
@@ -33,15 +40,31 @@ class AudioService extends ChangeNotifier {
   SleepSession? _currentSession;
   String? _sessionDirectory;
   
-  // バイブレーション設定
-  bool _vibrationEnabled = true;
+  // 録音カウントダウン
+  int _recordingCountdown = 0;
+  Timer? _countdownTimer;
   
   bool get isMonitoring => _isMonitoring;
   double get currentDecibel => _currentDecibel;
   bool get isRecording => _isRecording;
   double get detectionThreshold => _detectionThreshold;
   bool get isAboveThreshold => _currentDecibel > _detectionThreshold;
-  bool get vibrationEnabled => _vibrationEnabled;
+  int get recordingCountdown => _recordingCountdown;
+  
+  AudioService() {
+    // アプリのライフサイクルを監視
+    WidgetsBinding.instance.addObserver(this);
+  }
+  
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    print('アプリライフサイクル状態: $state');
+    if (state == AppLifecycleState.paused) {
+      print('⚠️ アプリがバックグラウンドに移行しました');
+    } else if (state == AppLifecycleState.resumed) {
+      print('✅ アプリがフォアグラウンドに復帰しました');
+    }
+  }
 
   Future<bool> checkPermission() async {
     final status = await Permission.microphone.status;
@@ -73,9 +96,8 @@ class AudioService extends ChangeNotifier {
     // 新しいスリープセッションを作成
     await _createNewSession();
 
-    // 設定から検出閾値とバイブレーション設定を読み込み
+    // 設定から検出閾値を読み込み
     await _loadDetectionThreshold();
-    await _loadVibrationSetting();
 
     // iOS Audio Sessionを設定
     print('Audio Session設定開始...');
@@ -84,7 +106,28 @@ class AudioService extends ChangeNotifier {
       avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
       avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.defaultToSpeaker,
       avAudioSessionMode: AVAudioSessionMode.measurement,
+      // 録音中でもハプティックフィードバック（バイブレーション）を許可
+      avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation,
     ));
+    
+    // iOS 13以降で録音中のハプティックフィードバックを明示的に許可
+    try {
+      await session.setActive(true);
+      print('Audio Session有効化完了');
+      
+      // プラットフォーム固有の設定でハプティックフィードバックを許可
+      if (Platform.isIOS) {
+        print('iOS: 録音中ハプティックフィードバック許可を設定中...');
+        try {
+          final result = await _audioChannel.invokeMethod('enableHapticsWhileRecording');
+          print('iOS: ハプティックフィードバック許可設定結果: $result');
+        } catch (e) {
+          print('iOS: ハプティックフィードバック許可設定エラー: $e');
+        }
+      }
+    } catch (e) {
+      print('Audio Session設定エラー: $e');
+    }
     print('Audio Session設定完了');
 
     _isMonitoring = true;
@@ -92,6 +135,21 @@ class AudioService extends ChangeNotifier {
 
     // 実際の録音を開始して音声レベルを監視
     await _startContinuousRecording();
+    
+    // テスト用: 5秒ごとに通知を実行
+    print('通知テストタイマー開始: 5秒ごと');
+    _notificationTestTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      print('テストタイマー: 5秒経過 - 通知実行');
+      
+      // 通知テスト
+      try {
+        print('テスト通知実行');
+        // 通知実行
+        print('テスト通知完了');
+      } catch (e) {
+        print('タイマー内通知エラー: $e');
+      }
+    });
   }
 
   Future<void> stopMonitoring() async {
@@ -100,6 +158,8 @@ class AudioService extends ChangeNotifier {
     _monitoringTimer = null;
     _recordingTimer?.cancel();
     _recordingTimer = null;
+    _notificationTestTimer?.cancel();
+    _notificationTestTimer = null;
     _currentDecibel = 0.0;
     _consecutiveDetections = 0;
     _lastDetectionTime = null;
@@ -192,22 +252,31 @@ class AudioService extends ChangeNotifier {
       // 歯ぎしり検出ロジック
       final now = DateTime.now();
       
+      // デバッグ: 常に現在のレベルと閾値を表示
+      if (_currentDecibel != 0.0) {
+        print('音声レベル: ${_currentDecibel.toStringAsFixed(1)}dB (閾値: ${_detectionThreshold.toStringAsFixed(1)}dB)');
+      }
+      
       if (_currentDecibel > _detectionThreshold) {
         // 前回検出から時間が経ちすぎている場合はリセット
         if (_lastDetectionTime != null && 
             now.difference(_lastDetectionTime!).inSeconds > _detectionTimeoutSeconds) {
+          print('検出タイムアウト: 連続検出カウントリセット');
           _consecutiveDetections = 0;
         }
         
         _consecutiveDetections++;
         _lastDetectionTime = now;
+        print('★★★ 音声検出: レベル=${_currentDecibel.toStringAsFixed(1)}dB > 閾値=${_detectionThreshold.toStringAsFixed(1)}dB, 連続=${_consecutiveDetections}/${_requiredConsecutiveDetections}');
         
         if (_consecutiveDetections >= _requiredConsecutiveDetections) {
           if (!_isRecording) {
             // 新しい録音を開始
+            print('★★★ 連続検出達成: 録音開始 ★★★');
             await _startRecording();
           } else {
             // 録音中の場合は5秒延長
+            print('録音延長');
             await _extendRecording();
           }
         }
@@ -228,11 +297,12 @@ class AudioService extends ChangeNotifier {
   Future<void> _startRecording() async {
     if (_isRecording) return;
     
+    print('録音開始処理開始');
     _isRecording = true;
     notifyListeners();
     
-    // バイブレーションで録音開始を通知
-    await _triggerVibration();
+    // 録音フラグが立った瞬間に即座に通知を実行
+    print('即座に通知実行');
 
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -248,6 +318,8 @@ class AudioService extends ChangeNotifier {
         path: filePath,
       );
 
+      print('録音開始完了');
+
       // 5秒後に録音終了するタイマーを設定
       _setRecordingTimer();
     } catch (e) {
@@ -260,12 +332,27 @@ class AudioService extends ChangeNotifier {
   void _setRecordingTimer() {
     // 既存のタイマーをキャンセル
     _recordingTimer?.cancel();
+    _countdownTimer?.cancel();
+    
+    // カウントダウンを5秒に設定
+    _recordingCountdown = 5;
+    notifyListeners();
+    
+    // 1秒ごとにカウントダウンを更新
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _recordingCountdown--;
+      notifyListeners();
+      
+      if (_recordingCountdown <= 0) {
+        timer.cancel();
+        _countdownTimer = null;
+      }
+    });
     
     // 5秒後に録音終了
     _recordingTimer = Timer(const Duration(seconds: 5), () async {
       await _stopRecording();
     });
-    
   }
 
   Future<void> _extendRecording() async {
@@ -284,6 +371,7 @@ class AudioService extends ChangeNotifier {
     
     try {
       _recordingTimer?.cancel();
+      _countdownTimer?.cancel();
       final path = await _eventRecorder.stop();
       
       if (path != null) {
@@ -306,8 +394,10 @@ class AudioService extends ChangeNotifier {
       print('Recording stop error: $e');
     } finally {
       _isRecording = false;
+      _recordingCountdown = 0;
       _consecutiveDetections = 0; // リセット
       _recordingTimer = null;
+      _countdownTimer = null;
       notifyListeners();
     }
   }
@@ -319,6 +409,13 @@ class AudioService extends ChangeNotifier {
     
     // 感度をdB値に変換 (0.0 = -50dB(高感度), 1.0 = -10dB(低感度))
     _detectionThreshold = -50.0 + (sensitivity * 40.0);
+    
+    // テストモード: より低い閾値を設定して検出しやすくする
+    if (_testMode) {
+      _detectionThreshold = -60.0; // 現在の音声レベル（-65dB前後）より少し高く設定
+      print('テストモード: 検出閾値を${_detectionThreshold}dBに設定');
+    }
+    
     notifyListeners(); // UI更新のため
   }
 
@@ -328,38 +425,12 @@ class AudioService extends ChangeNotifier {
   }
 
   /// バイブレーション設定を読み込み
-  Future<void> _loadVibrationSetting() async {
-    final prefs = await SharedPreferences.getInstance();
-    _vibrationEnabled = prefs.getBool('vibrationEnabled') ?? true;
-    notifyListeners();
-  }
 
-  /// バイブレーション設定を保存
-  Future<void> setVibrationEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('vibrationEnabled', enabled);
-    _vibrationEnabled = enabled;
-    notifyListeners();
-  }
-
-  /// バイブレーションを実行
-  Future<void> _triggerVibration() async {
-    if (!_vibrationEnabled) return;
-    
-    try {
-      // デバイスがバイブレーションをサポートしているかチェック
-      bool? hasVibrator = await Vibration.hasVibrator();
-      if (hasVibrator == true) {
-        // 短いバイブレーション（200ms）
-        await Vibration.vibrate(duration: 200);
-      }
-    } catch (e) {
-      print('バイブレーションエラー: $e');
-    }
-  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _countdownTimer?.cancel();
     stopMonitoring();
     _recorder.dispose();
     _eventRecorder.dispose();

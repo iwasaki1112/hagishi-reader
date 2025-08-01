@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'dart:io';
 import 'dart:math';
 import 'package:audio_waveforms/audio_waveforms.dart';
-import 'package:toastification/toastification.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import '../models/bruxism_event.dart';
 import '../models/sleep_session.dart';
@@ -110,14 +109,11 @@ class _RecordingsScreenState extends State<RecordingsScreen>
     return defaultWaveform;
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('録音データ'),
-      ),
-      body: _isLoading
+      body: SafeArea(
+        child: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _sessions.isEmpty
               ? Center(
@@ -156,6 +152,7 @@ class _RecordingsScreenState extends State<RecordingsScreen>
                     },
                   ),
                 ),
+      ),
     );
   }
 
@@ -300,8 +297,6 @@ class _RecordingsScreenState extends State<RecordingsScreen>
                                   );
                                   audioPlayer.seek(position);
                                 },
-                                activeColor: Theme.of(context).colorScheme.primary,
-                                inactiveColor: Theme.of(context).colorScheme.outline.withOpacity(0.3),
                               ),
                             ),
                           ),
@@ -324,42 +319,26 @@ class _RecordingsScreenState extends State<RecordingsScreen>
                         return AnimatedBuilder(
                           animation: _animationController,
                           builder: (context, child) {
-                            return SizedBox(
-                              height: 32,
+                            return Container(
+                              height: 60,
+                              margin: const EdgeInsets.symmetric(vertical: 8),
                               child: Row(
-                                children: List.generate(50, (index) {
-                                  final progress = audioPlayer.progress;
-                                  final isActive = (index / 50) <= progress;
+                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: List.generate(waveformData.length, (index) {
+                                  final progress = audioPlayer.progress.clamp(0.0, 1.0);
+                                  final isActive = (index / waveformData.length) <= progress;
+                                  final height = (waveformData[index] * 50).clamp(2.0, 50.0);
                                   
-                                  // 実際の波形データから高さを計算
-                                  final baseHeight = (waveformData[index] * 24) + 4; // 4-28の範囲
-                                  
-                                  // 再生中のアニメーション効果
-                                  final animationOffset = audioPlayer.isPlaying && isActive
-                                    ? (sin((_animationController.value * pi * 2) + (index * 0.2)) * 2)
-                                    : 0.0;
-                                  
-                                  final height = (baseHeight + animationOffset).clamp(2.0, 28.0);
-                                  
-                                  return Expanded(
-                                    child: Container(
-                                      margin: const EdgeInsets.symmetric(horizontal: 0.5),
-                                      height: height,
-                                      decoration: BoxDecoration(
-                                        color: isActive 
-                                          ? (audioPlayer.isPlaying 
-                                              ? Theme.of(context).colorScheme.primary.withOpacity(0.9)
-                                              : Theme.of(context).colorScheme.primary.withOpacity(0.6))
-                                          : Theme.of(context).colorScheme.outline.withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(1.5),
-                                        boxShadow: isActive && audioPlayer.isPlaying ? [
-                                          BoxShadow(
-                                            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-                                            blurRadius: 2,
-                                            spreadRadius: 0.5,
-                                          )
-                                        ] : null,
-                                      ),
+                                  return AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    width: 2,
+                                    height: height,
+                                    decoration: BoxDecoration(
+                                      color: isCurrentlyPlaying && isActive
+                                          ? Theme.of(context).colorScheme.primary
+                                          : _getIntensityColor(waveformData[index]).withOpacity(0.7),
+                                      borderRadius: BorderRadius.circular(1),
                                     ),
                                   );
                                 }),
@@ -378,114 +357,24 @@ class _RecordingsScreenState extends State<RecordingsScreen>
     );
   }
 
+  void _togglePlayback(BruxismEvent event, AudioPlayerService audioPlayer) async {
+    if (event.audioFilePath == null) return;
+    
+    if (audioPlayer.isPlaying && audioPlayer.currentFilePath == event.audioFilePath) {
+      await audioPlayer.pause();
+    } else if (!audioPlayer.isPlaying && audioPlayer.currentFilePath == event.audioFilePath) {
+      await audioPlayer.resume();
+    } else {
+      await audioPlayer.play(event.audioFilePath!);
+    }
+  }
+
   Color _getIntensityColor(double intensity) {
     if (intensity < 0.3) return Colors.green;
     if (intensity < 0.7) return Colors.orange;
     return Colors.red;
   }
 
-  Future<void> _togglePlayback(BruxismEvent event, AudioPlayerService audioPlayer) async {
-    if (event.audioFilePath == null) {
-      if (mounted) {
-        toastification.show(
-          context: context,
-          type: ToastificationType.error,
-          style: ToastificationStyle.fillColored,
-          title: const Text('ファイルエラー'),
-          description: const Text('音声ファイルが見つかりません'),
-          alignment: Alignment.topCenter,
-          autoCloseDuration: const Duration(seconds: 3),
-          primaryColor: Colors.red,
-          icon: const Icon(Icons.error_outline),
-        );
-      }
-      return;
-    }
-    
-    // ファイルの存在確認
-    final file = File(event.audioFilePath!);
-    if (!await file.exists()) {
-      if (mounted) {
-        toastification.show(
-          context: context,
-          type: ToastificationType.warning,
-          style: ToastificationStyle.fillColored,
-          title: const Text('ファイルが見つかりません'),
-          description: const Text('音声ファイルが削除されています'),
-          alignment: Alignment.topCenter,
-          autoCloseDuration: const Duration(seconds: 3),
-          primaryColor: Colors.orange,
-          icon: const Icon(Icons.folder_off),
-        );
-      }
-      return;
-    }
-    
-    final isCurrentlyPlaying = audioPlayer.isPlaying && 
-      audioPlayer.currentFilePath == event.audioFilePath;
-    
-    if (isCurrentlyPlaying) {
-      await audioPlayer.pause();
-      if (mounted) {
-        toastification.show(
-          context: context,
-          type: ToastificationType.info,
-          style: ToastificationStyle.fillColored,
-          title: const Text('一時停止'),
-          description: const Text('再生を一時停止しました'),
-          alignment: Alignment.topCenter,
-          autoCloseDuration: const Duration(seconds: 2),
-          primaryColor: Colors.blue,
-          icon: const Icon(Icons.pause_circle),
-        );
-      }
-    } else if (audioPlayer.currentFilePath == event.audioFilePath) {
-      // 同じファイルの再開
-      await audioPlayer.resume();
-      if (mounted) {
-        toastification.show(
-          context: context,
-          type: ToastificationType.success,
-          style: ToastificationStyle.fillColored,
-          title: const Text('再生再開'),
-          description: const Text('再生を再開しました'),
-          alignment: Alignment.topCenter,
-          autoCloseDuration: const Duration(seconds: 2),
-          primaryColor: Colors.green,
-          icon: const Icon(Icons.play_circle),
-        );
-      }
-    } else {
-      // 新しいファイルの再生
-      final success = await audioPlayer.play(event.audioFilePath!);
-      if (success && mounted) {
-        final dateFormat = DateFormat('MM/dd HH:mm');
-        toastification.show(
-          context: context,
-          type: ToastificationType.success,
-          style: ToastificationStyle.fillColored,
-          title: const Text('再生開始'),
-          description: Text('${dateFormat.format(event.detectedAt)}の録音を再生中'),
-          alignment: Alignment.topCenter,
-          autoCloseDuration: const Duration(seconds: 4),
-          primaryColor: Colors.green,
-          icon: const Icon(Icons.play_circle_filled),
-        );
-      } else if (!success && mounted) {
-        toastification.show(
-          context: context,
-          type: ToastificationType.error,
-          style: ToastificationStyle.fillColored,
-          title: const Text('再生エラー'),
-          description: const Text('再生に失敗しました'),
-          alignment: Alignment.topCenter,
-          autoCloseDuration: const Duration(seconds: 3),
-          primaryColor: Colors.red,
-          icon: const Icon(Icons.error),
-        );
-      }
-    }
-  }
 
   Future<void> _confirmDelete(BruxismEvent event) async {
     final confirmed = await showDialog<bool>(
@@ -507,14 +396,13 @@ class _RecordingsScreenState extends State<RecordingsScreen>
     );
 
     if (confirmed == true && event.id != null) {
-      await DatabaseService.instance.deleteEvent(event.id!);
-      
-      // 削除したファイルが再生中の場合は停止
-      final audioPlayer = context.read<AudioPlayerService>();
+      // 削除する音声ファイルが再生中の場合は停止
+      final audioPlayer = Provider.of<AudioPlayerService>(context, listen: false);
       if (audioPlayer.currentFilePath == event.audioFilePath) {
         await audioPlayer.stop();
       }
       
+      await DatabaseService.instance.deleteEvent(event.id!);
       await _loadSessions();
     }
   }
@@ -578,15 +466,14 @@ class _RecordingsScreenState extends State<RecordingsScreen>
 
   Future<void> _deleteSession(SleepSession session) async {
     try {
-      // 再生中の音声があれば停止
-      final audioPlayer = context.read<AudioPlayerService>();
       final events = _sessionEvents[session.sessionId] ?? [];
-      
-      for (final event in events) {
-        if (audioPlayer.currentFilePath == event.audioFilePath) {
-          await audioPlayer.stop();
-          break;
-        }
+
+      // セッション内のファイルが再生中の場合は停止
+      final audioPlayer = Provider.of<AudioPlayerService>(context, listen: false);
+      final isPlayingSessionFile = events.any((event) => 
+        audioPlayer.currentFilePath == event.audioFilePath);
+      if (isPlayingSessionFile) {
+        await audioPlayer.stop();
       }
 
       // セッションディレクトリとすべてのファイルを削除
@@ -598,43 +485,13 @@ class _RecordingsScreenState extends State<RecordingsScreen>
       // データベースからセッションと関連イベントを削除
       await DatabaseService.instance.deleteSession(session.id!);
 
-      // 波形キャッシュをクリア
-      for (final event in events) {
-        if (event.audioFilePath != null) {
-          _waveformCache.remove(event.audioFilePath!);
-        }
-      }
-
       // UI更新
       await _loadSessions();
 
-      if (mounted) {
-        toastification.show(
-          context: context,
-          type: ToastificationType.success,
-          style: ToastificationStyle.fillColored,
-          title: const Text('削除完了'),
-          description: Text('セッション (${events.length}件の録音) を削除しました'),
-          alignment: Alignment.topCenter,
-          autoCloseDuration: const Duration(seconds: 3),
-          primaryColor: Colors.green,
-          icon: const Icon(Icons.check_circle),
-        );
-      }
+      // 削除完了
+      print('セッション削除完了: ${events.length}件の録音');
     } catch (e) {
-      if (mounted) {
-        toastification.show(
-          context: context,
-          type: ToastificationType.error,
-          style: ToastificationStyle.fillColored,
-          title: const Text('削除エラー'),
-          description: Text('セッションの削除に失敗しました: ${e.toString()}'),
-          alignment: Alignment.topCenter,
-          autoCloseDuration: const Duration(seconds: 4),
-          primaryColor: Colors.red,
-          icon: const Icon(Icons.error),
-        );
-      }
+      print('セッション削除エラー: $e');
     }
   }
 }

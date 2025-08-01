@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
-import 'package:toastification/toastification.dart';
 import '../services/audio_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -41,32 +40,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('設定'),
-      ),
-      body: ListView(
+      body: SafeArea(
+        child: ListView(
         children: [
           // Detection Settings
           _SectionHeader(title: '検出設定'),
-          ListTile(
-            title: const Text('検出感度'),
-            subtitle: Slider(
-              value: _detectionSensitivity,
-              min: 0.0,
-              max: 1.0,
-              divisions: 10,
-              label: '${(_detectionSensitivity * 100).toInt()}%',
-              onChanged: (value) {
-                setState(() {
-                  _detectionSensitivity = value;
-                });
-                _saveSettings();
-                
-                // AudioServiceの閾値を更新
-                final audioService = Provider.of<AudioService>(context, listen: false);
-                audioService.reloadDetectionThreshold();
-              },
-            ),
+          Consumer<AudioService>(
+            builder: (context, audioService, child) {
+              return ListTile(
+                title: const Text('検出感度'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Slider(
+                      value: _detectionSensitivity,
+                      min: 0.0,
+                      max: 1.0,
+                      divisions: 10,
+                      label: '${(_detectionSensitivity * 100).toInt()}%',
+                      onChanged: (value) {
+                        setState(() {
+                          _detectionSensitivity = value;
+                        });
+                        _saveSettings();
+                        
+                        // AudioServiceの閾値を更新
+                        audioService.reloadDetectionThreshold();
+                      },
+                    ),
+                    Text(
+                      '現在の閾値: ${audioService.detectionThreshold.toStringAsFixed(1)} dB',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
           ListTile(
             title: const Text('録音時間'),
@@ -88,18 +99,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 }
               },
             ),
-          ),
-          Consumer<AudioService>(
-            builder: (context, audioService, child) {
-              return SwitchListTile(
-                title: const Text('録音時バイブレーション'),
-                subtitle: const Text('歯ぎしり検出時にバイブレーションで通知'),
-                value: audioService.vibrationEnabled,
-                onChanged: (value) {
-                  audioService.setVibrationEnabled(value);
-                },
-              );
-            },
           ),
 
           const SizedBox(height: 16),
@@ -150,10 +149,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: const Text('1.0.0'),
           ),
         ],
+        ),
       ),
     );
   }
-
 
   void _showHelpDialog(BuildContext context) {
     showDialog(
@@ -173,7 +172,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               SizedBox(height: 8),
               Text('4. 朝起きたらスリープモードを解除'),
               SizedBox(height: 8),
-              Text('5. 録音タブで夜間の歯ぎしりを確認・再生'),
+              Text('5. 録音タブで夜間の歯ぎしりを確認'),
             ],
           ),
         ),

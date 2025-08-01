@@ -6,7 +6,6 @@ import 'package:hagishi_reader/services/audio_service.dart';
 import 'package:hagishi_reader/services/audio_player_service.dart';
 import 'package:hagishi_reader/services/database_service.dart';
 import 'package:provider/provider.dart';
-import 'package:toastification/toastification.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,8 +26,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AudioService()),
         ChangeNotifierProvider(create: (_) => AudioPlayerService()),
       ],
-      child: ToastificationWrapper(
-        child: MaterialApp(
+      child: MaterialApp(
           title: '歯ぎしリーダー',
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
@@ -39,7 +37,6 @@ class MyApp extends StatelessWidget {
           ),
           home: const MainScreen(),
         ),
-      ),
     );
   }
 }
@@ -73,14 +70,14 @@ class _MainScreenState extends State<MainScreen> {
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'ホーム',
-          ),
-          NavigationDestination(
             icon: Icon(Icons.mic_outlined),
             selectedIcon: Icon(Icons.mic),
             label: '録音',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.list_outlined),
+            selectedIcon: Icon(Icons.list),
+            label: '録音一覧',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
