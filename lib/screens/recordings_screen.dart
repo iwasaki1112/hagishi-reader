@@ -132,7 +132,8 @@ class _RecordingsScreenState extends State<RecordingsScreen>
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'スリープモードを使用すると、セッションが表示されます',
+                        'スリープモードを使用すると、\nセッションが表示されます',
+                        textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Theme.of(context).colorScheme.outline,
                             ),
